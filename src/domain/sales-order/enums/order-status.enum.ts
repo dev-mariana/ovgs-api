@@ -1,0 +1,7 @@
+export enum OrderStatus {
+  CREATED = 'CREATED',
+  PLANNED = 'PLANNED',
+  SCHEDULED = 'SCHEDULED',
+  IN_TRANSIT = 'IN_TRANSIT',
+  DELIVERED = 'DELIVERED',
+}
