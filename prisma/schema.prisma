@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum OrderStatus {
+  CREATED
+  PLANNED
+  SCHEDULED
+  IN_TRANSIT
+  DELIVERED
+}
+
+enum AuditAction {
+  ORDER_CREATED
+  ORDER_STATUS_CHANGED
+  SCHEDULE_CREATED
+  SCHEDULE_CONFIRMED
+  SCHEDULE_RESCHEDULED
+  ORDER_TRANSPORT_CHANGED
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model Customer {
+  id        String   @id @default(cuid(2))
+  name      String
+  document  String   @unique
+  email     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  authorizedTransportTypes CustomerTransportType[]
+  salesOrders              SalesOrder[]
+
+  @@map("customers")
+}
+
+model TransportType {
+  id          String   @id @default(cuid(2))
+  name        String   @unique
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt      @map("updated_at")
+
+  authorizedCustomers CustomerTransportType[]
+  salesOrders         SalesOrder[]
+
+  @@map("transport_types")
+}
+
+model CustomerTransportType {
+  customerId      String   @map("customer_id")
+  transportTypeId String   @map("transport_type_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  customer      Customer      @relation(fields: [customerId], references: [id])
+  transportType TransportType @relation(fields: [transportTypeId], references: [id])
+
+  @@id([customerId, transportTypeId])
+  @@map("customer_transport_types")
+}
+
+model Item {
+  id          String   @id @default(cuid(2))
+  sku         String   @unique
+  name        String
+  description String?
+  unit        String
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt      @map("updated_at")
+
+  salesOrderItems SalesOrderItem[]
+
+  @@map("items")
+}
+
+model SalesOrder {
+  id              String      @id @default(cuid(2))
+  orderNumber     String      @unique @map("order_number")
+  customerId      String      @map("customer_id")
+  transportTypeId String      @map("transport_type_id")
+  status          OrderStatus @default(CREATED)
+  notes           String?
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt      @map("updated_at")
+
+  customer      Customer         @relation(fields: [customerId], references: [id])
+  transportType TransportType    @relation(fields: [transportTypeId], references: [id])
+  items         SalesOrderItem[]
+  schedule      DeliverySchedule?
+
+  @@index([customerId])
+  @@index([transportTypeId])
+  @@index([status])
+  @@index([status, createdAt])
+  @@map("sales_orders")
+}
+
+model SalesOrderItem {
+  salesOrderId String   @map("sales_order_id")
+  itemId       String   @map("item_id")
+  quantity     Int
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id])
+  item       Item       @relation(fields: [itemId], references: [id])
+
+  @@id([salesOrderId, itemId])
+  @@map("sales_order_items")
+}
+
+model DeliverySchedule {
+  id            String    @id @default(cuid(2))
+  salesOrderId  String    @unique      @map("sales_order_id")
+  scheduledDate DateTime               @map("scheduled_date")
+  windowStart   String                 @map("window_start")
+  windowEnd     String                 @map("window_end")
+  confirmedAt   DateTime?              @map("confirmed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt      @map("updated_at")
+
+  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id])
+
+  @@map("delivery_schedules")
+}
+
+model AuditLog {
+  id            String      @id @default(cuid(2))
+  entity        String
+  entityId      String      @map("entity_id")
+  action        AuditAction
+  previousState Json?       @map("previous_state")
+  nextState     Json        @map("next_state")
+  occurredAt    DateTime    @default(now()) @map("occurred_at")
+
+  @@index([entityId, entity])
+  @@map("audit_logs")
+}
