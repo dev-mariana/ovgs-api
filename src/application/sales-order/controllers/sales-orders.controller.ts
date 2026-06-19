@@ -7,23 +7,41 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { SalesOrder } from '../../../domain/sales-order/entities/sales-order.entity';
 import { CreateSalesOrderDto } from '../dto/create-sales-order.dto';
 import { ListSalesOrdersDto } from '../dto/list-sales-orders.dto';
 import { UpdateOrderStatusDto } from '../dto/update-order-status.dto';
 import { SalesOrdersService } from '../services/sales-orders.service';
 
+@ApiTags('Sales Orders')
 @Controller('sales-orders')
 export class SalesOrdersController {
   constructor(private readonly service: SalesOrdersService) {}
 
   @Post()
+  @ApiOperation({ summary: 'Create a sales order' })
+  @ApiResponse({ status: 201, description: 'Sales order created.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid payload or duplicate items.',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Customer, transport type or item not found.',
+  })
+  @ApiResponse({
+    status: 422,
+    description: 'Transport type not authorized (RN-01) or no items (RN-02).',
+  })
   async create(@Body() dto: CreateSalesOrderDto) {
     const order = await this.service.create(dto);
     return this.formatDetail(order);
   }
 
   @Get()
+  @ApiOperation({ summary: 'List sales orders with operational filters' })
+  @ApiResponse({ status: 200, description: 'Paginated list of sales orders.' })
   async findAll(@Query() query: ListSalesOrdersDto) {
     const result = await this.service.findAll(query);
     return {
@@ -45,6 +63,11 @@ export class SalesOrdersController {
   }
 
   @Get(':id')
+  @ApiOperation({
+    summary: 'Get sales order detail with items, schedule and audit history',
+  })
+  @ApiResponse({ status: 200, description: 'Sales order full detail.' })
+  @ApiResponse({ status: 404, description: 'Sales order not found.' })
   async findById(@Param('id') id: string) {
     const result = await this.service.findById(id);
     const { auditHistory } = result;
@@ -52,6 +75,14 @@ export class SalesOrdersController {
   }
 
   @Patch(':id/status')
+  @ApiOperation({ summary: 'Advance sales order status' })
+  @ApiResponse({ status: 200, description: 'Status updated.' })
+  @ApiResponse({ status: 404, description: 'Sales order not found.' })
+  @ApiResponse({
+    status: 422,
+    description:
+      'Invalid transition, missing schedule (RN-06) or unconfirmed schedule (RN-07).',
+  })
   async updateStatus(
     @Param('id') id: string,
     @Body() dto: UpdateOrderStatusDto,
