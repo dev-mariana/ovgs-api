@@ -112,6 +112,7 @@ npm run test:cov
 | `GET` | `/sales-orders` | Listar ordens (filtros: status, cliente, transporte, datas) |
 | `GET` | `/sales-orders/:id` | Detalhe da ordem com itens, agendamento e histórico de auditoria |
 | `PATCH` | `/sales-orders/:id/status` | Avançar status da ordem |
+| `PATCH` | `/sales-orders/:id/transport-type` | Alterar tipo de transporte da ordem |
 | `POST` | `/sales-orders/:id/schedule` | Criar agendamento de entrega |
 | `PATCH` | `/sales-orders/:id/schedule` | Reagendar entrega |
 | `POST` | `/sales-orders/:id/schedule/confirm` | Confirmar agendamento |
@@ -141,6 +142,42 @@ Não há transições retroativas nem saltos de etapa.
 
 ---
 
+## Modelagem do domínio
+
+O domínio foi modelado a partir das entidades de negócio, sem acoplamento a frameworks ou banco de dados. Todas as entidades são interfaces TypeScript puras (`SalesOrder`, `Customer`, `DeliverySchedule`, etc.) e vivem em `src/domain/`.
+
+As relações principais são:
+
+```
+Customer (1) ──< CustomerTransportType >── (N) TransportType
+    │
+    └── (1) ──< SalesOrder
+                    ├── (N) SalesOrderItem ──> Item
+                    ├── (1) TransportType
+                    └── (0..1) DeliverySchedule
+```
+
+`CustomerTransportType` é uma tabela de junção explícita que modela a autorização de tipos de transporte por cliente — escolhida sobre um simples array de IDs para suportar futuros atributos na relação (ex: validade, limite de peso).
+
+O fluxo de status da `SalesOrder` é governado por `OrderStatusMachine`, uma classe pura sem dependências externas. O grafo de transições válidas é declarado como um mapa estático, tornando as regras visíveis e extensíveis sem alterar lógica de negócio dispersa nos services.
+
+A `AuditLog` é uma entidade genérica com `entity` + `entityId` + `action` + estados JSON anterior/posterior — escolha deliberada para suportar auditoria de qualquer entidade sem criar tabelas de log por domínio.
+
+---
+
+## Estratégia de persistência
+
+O banco de dados é PostgreSQL 16, acessado via Prisma com o adapter `@prisma/adapter-pg` (driver nativo, sem dependência do `pg` legado do lado do Prisma Engine).
+
+As principais decisões de persistência:
+
+- **Índices compostos** em `sales_orders`: `(status)`, `(customer_id)`, `(transport_type_id)` e `(status, created_at)` para suportar os filtros de monitoramento operacional sem full scan.
+- **`_count` em vez de JOIN**: a listagem de ordens retorna `itemCount` via `_count: { select: { items: true } }`, evitando carregar todos os itens só para contar.
+- **Mappers explícitos** (`SalesOrderMapper.toDomain`): a conversão entre o tipo Prisma e a entidade de domínio é isolada em `src/infra/database/prisma/mappers/`, mantendo os services agnósticos ao esquema do banco.
+- **Migrations versionadas**: todo schema é gerenciado pelo Prisma Migrate, garantindo reprodutibilidade do ambiente entre desenvolvedores e em CI.
+
+---
+
 ## Decisões arquiteturais
 
 ### Clean Architecture em camadas
@@ -158,24 +195,44 @@ Nenhuma dependência do `domain/` aponta para NestJS ou Prisma, mantendo a lógi
 
 ### Repository Pattern com injeção por token string
 
-Os repositórios são definidos como interfaces em `domain/` e injetados via token string (`SALES_ORDER_REPOSITORY = 'ISalesOrderRepository'`). Isso desacopla os services das implementações concretas do Prisma e facilita a troca em testes unitários sem carregar o framework.
+Os repositórios são definidos como interfaces em `domain/` e injetados via token string (`SALES_ORDER_REPOSITORY = 'ISalesOrderRepository'`). Isso desacopla os services das implementações concretas do Prisma e facilita a substituição em testes unitários sem carregar o framework.
 
 ### OrderStatusMachine
 
-As transições de status são centralizadas em `OrderStatusMachine` — uma classe pura sem dependências de framework. Qualquer tentativa de transição inválida lança `InvalidTransitionError`, que o service mapeia para HTTP 422. Isso garante que a regra de fluxo é testável sem subir a aplicação.
-
-### Auditoria pós-operação
-
-O `AuditService.record()` é chamado após a operação principal ser persistida com sucesso. Isso significa que em caso de falha no registro de auditoria, a operação já foi commitada. O trade-off consciente é favorecer consistência da operação de negócio sobre a completude do log — uma solução transacional (evento dentro da mesma transação) seria mais robusta mas exigiria maior complexidade de infraestrutura.
-
-### itemCount via `_count` do Prisma
-
-A listagem de ordens retorna `itemCount` sem carregar os itens completos. Isso é feito através de `_count: { select: { items: true } }` no `findAll` do repositório, evitando N+1 e mantendo a resposta leve.
+As transições de status são centralizadas em `OrderStatusMachine` — uma classe pura sem dependências de framework. Qualquer tentativa de transição inválida lança `InvalidTransitionError`, que o service mapeia para HTTP 422. Isso garante que a regra de fluxo é testável isoladamente e facilita adicionar novos estados sem modificar código espalhado.
 
 ### Logging estruturado com nestjs-pino
 
-Todos os services usam `@InjectPinoLogger(ServiceName)` para logging contextualizado. Cada log de warning inclui o campo `rule` com o código da regra violada (ex: `TRANSPORT_NOT_AUTHORIZED`), facilitando a rastreabilidade em produção. O `correlationId` é propagado via header `x-correlation-id` ou gerado automaticamente por requisição.
+Todos os services usam `@InjectPinoLogger(ServiceName)` para logging contextualizado em JSON. Cada log de warning inclui o campo `rule` com o código da regra violada (ex: `TRANSPORT_NOT_AUTHORIZED`), facilitando a rastreabilidade em produção. O `correlationId` é propagado via header `x-correlation-id` ou gerado automaticamente por requisição.
 
-### ConfigModule para carregamento do .env
+---
 
-O `ConfigModule.forRoot({ isGlobal: true })` é carregado como primeiro módulo no `AppModule`, garantindo que as variáveis de ambiente estejam disponíveis antes de qualquer instanciação de serviço (incluindo o `PrismaService`).
+## Considerações sobre escalabilidade
+
+A arquitetura atual suporta escala vertical sem mudanças. Para escala horizontal, os pontos de atenção são:
+
+- **Stateless por design**: a API não mantém estado em memória entre requisições — pode ser escalada horizontalmente com múltiplas instâncias atrás de um load balancer sem ajustes.
+- **Geração de `orderNumber`**: o número da OV (`OV-YYYY-NNNNN`) é gerado com um `COUNT` no banco. Em alta concorrência, isso pode gerar colisões ou lentidão. A solução recomendada para escala é substituir por uma sequence de banco (`SERIAL` / `SEQUENCE` no PostgreSQL) ou um serviço de geração de IDs ordenados.
+- **Auditoria assíncrona**: hoje o `AuditService.record()` é chamado de forma síncrona após cada operação. Em volume alto, isso adiciona latência. O próximo passo natural seria publicar eventos em uma fila (ex: BullMQ, SQS) e processar o log de auditoria de forma assíncrona, desacoplando a escrita do log da resposta HTTP.
+- **Índices de banco**: os índices em `sales_orders` cobrem os filtros de monitoramento operacional. À medida que o volume cresce, índices parciais (ex: `WHERE status != 'DELIVERED'`) e particionamento por data podem ser considerados.
+
+---
+
+## Considerações sobre performance
+
+- **N+1 eliminado na listagem**: a rota `GET /sales-orders` usa `_count` do Prisma para `itemCount` e carrega `customer` e `transportType` em uma única query com `include`, sem queries adicionais por registro.
+- **Paginação obrigatória**: todos os endpoints de listagem aceitam `page` e `limit` (máximo 100) e nunca retornam conjuntos ilimitados.
+- **Detalhe vs. lista separados**: o endpoint `GET /sales-orders` retorna uma representação resumida (sem itens completos). Os itens, agendamento e histórico de auditoria só são carregados no `GET /sales-orders/:id`, que é acessado sob demanda.
+- **JSON nativo do PostgreSQL para auditoria**: `previousState` e `nextState` são colunas `Json` — a gravação e leitura são feitas diretamente pelo Prisma sem serialização adicional na aplicação.
+
+---
+
+## Trade-offs assumidos
+
+| Decisão | Alternativa preterida | Motivo |
+|---|---|---|
+| Auditoria síncrona pós-operação | Transação compartilhada ou fila assíncrona | Reduz complexidade de infraestrutura sem comprometer o requisito funcional para o volume atual |
+| `orderNumber` gerado via `COUNT` | Sequence de banco | Suficiente para o contexto do desafio; documentado como débito técnico para produção em alta escala |
+| Entidades de domínio como interfaces TypeScript | Classes com decorators (ex: TypeORM entities) | Mantém o domínio puro e testável sem acoplamento a frameworks |
+| Auditoria genérica (`entity` + `entityId` em texto) | Tabelas de log por entidade | Evita proliferação de tabelas e permite auditar qualquer entidade nova sem migrations adicionais |
+| Sem autenticação/autorização | JWT + RBAC | Fora do escopo definido; a estrutura de módulos NestJS facilita a adição de guards globais sem refatoração |
