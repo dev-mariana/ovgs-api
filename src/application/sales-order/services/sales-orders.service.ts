@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { AuditService } from '../../audit/services/audit.service';
 import { BadRequestException } from '../../../common/filters/errors/bad-request.exception';
 import { NotFoundException } from '../../../common/filters/errors/not-found.exception';
@@ -29,6 +30,8 @@ export const SALES_ORDER_REPOSITORY = 'ISalesOrderRepository';
 @Injectable()
 export class SalesOrdersService {
   constructor(
+    @InjectPinoLogger(SalesOrdersService.name)
+    private readonly logger: PinoLogger,
     @Inject(SALES_ORDER_REPOSITORY)
     private readonly orderRepository: ISalesOrderRepository,
     @Inject(CUSTOMER_REPOSITORY)
@@ -43,6 +46,10 @@ export class SalesOrdersService {
   async create(dto: CreateSalesOrderDto): Promise<SalesOrder> {
     // RN-02
     if (dto.items.length === 0) {
+      this.logger.warn(
+        { customerId: dto.customerId, rule: 'NO_ITEMS' },
+        'Business rule violated: sales order must have at least one item',
+      );
       throw new UnprocessableEntityException(
         'Sales order must have at least one item.',
         'NO_ITEMS',
@@ -70,6 +77,14 @@ export class SalesOrdersService {
         (t) => t.id === dto.transportTypeId,
       ) ?? false;
     if (!isAuthorized) {
+      this.logger.warn(
+        {
+          customerId: dto.customerId,
+          transportTypeId: dto.transportTypeId,
+          rule: 'TRANSPORT_NOT_AUTHORIZED',
+        },
+        `Business rule violated: transport type '${transportType.name}' is not authorized for this customer`,
+      );
       throw new UnprocessableEntityException(
         `Transport type '${transportType.name}' is not authorized for this customer.`,
         'TRANSPORT_NOT_AUTHORIZED',
@@ -96,6 +111,16 @@ export class SalesOrdersService {
       previousState: null,
       nextState: { status: order.status },
     });
+
+    this.logger.info(
+      {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        customerId: order.customerId,
+        transportTypeId: order.transportTypeId,
+      },
+      'Sales order created',
+    );
 
     return order;
   }
@@ -144,6 +169,15 @@ export class SalesOrdersService {
       OrderStatusMachine.transition(order.status, dto.status);
     } catch (e) {
       if (e instanceof InvalidTransitionError) {
+        this.logger.warn(
+          {
+            orderId: id,
+            from: order.status,
+            to: dto.status,
+            rule: 'INVALID_STATUS_TRANSITION',
+          },
+          'Business rule violated: invalid status transition',
+        );
         throw new UnprocessableEntityException(
           `Cannot transition from ${order.status} to ${dto.status}.`,
           'INVALID_STATUS_TRANSITION',
@@ -154,6 +188,10 @@ export class SalesOrdersService {
 
     // RN-06
     if (dto.status === OrderStatus.SCHEDULED && !order.schedule) {
+      this.logger.warn(
+        { orderId: id, to: dto.status, rule: 'SCHEDULE_REQUIRED' },
+        'Business rule violated: no delivery schedule exists for this order',
+      );
       throw new UnprocessableEntityException(
         'A delivery schedule must exist before transitioning to SCHEDULED.',
         'SCHEDULE_REQUIRED',
@@ -162,6 +200,10 @@ export class SalesOrdersService {
 
     // RN-07
     if (dto.status === OrderStatus.IN_TRANSIT && !order.schedule?.confirmedAt) {
+      this.logger.warn(
+        { orderId: id, to: dto.status, rule: 'SCHEDULE_NOT_CONFIRMED' },
+        'Business rule violated: delivery schedule is not confirmed',
+      );
       throw new UnprocessableEntityException(
         'The delivery schedule must be confirmed before transitioning to IN_TRANSIT.',
         'SCHEDULE_NOT_CONFIRMED',
@@ -178,6 +220,11 @@ export class SalesOrdersService {
       previousState: { status: previousStatus },
       nextState: { status: dto.status },
     });
+
+    this.logger.info(
+      { orderId: id, from: previousStatus, to: dto.status },
+      'Order status transitioned',
+    );
 
     return updated;
   }

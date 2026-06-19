@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { NotFoundException } from '../../../common/filters/errors/not-found.exception';
 import type { Item } from '../../../domain/item/entities/item.entity';
 import type {
@@ -13,12 +14,19 @@ export const ITEM_REPOSITORY = 'IItemRepository';
 @Injectable()
 export class ItemsService {
   constructor(
+    @InjectPinoLogger(ItemsService.name)
+    private readonly logger: PinoLogger,
     @Inject(ITEM_REPOSITORY)
     private readonly repository: IItemRepository,
   ) {}
 
   async create(dto: CreateItemDto): Promise<Item> {
-    return this.repository.create(dto);
+    const item = await this.repository.create(dto);
+    this.logger.info(
+      { itemId: item.id, sku: item.sku, name: item.name },
+      'Item created',
+    );
+    return item;
   }
 
   async findAll(

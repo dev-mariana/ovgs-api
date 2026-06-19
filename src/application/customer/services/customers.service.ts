@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { NotFoundException } from '../../../common/filters/errors/not-found.exception';
 import type { Customer } from '../../../domain/customer/entities/customer.entity';
 import type {
@@ -17,6 +18,8 @@ export const CUSTOMER_REPOSITORY = 'ICustomerRepository';
 @Injectable()
 export class CustomersService {
   constructor(
+    @InjectPinoLogger(CustomersService.name)
+    private readonly logger: PinoLogger,
     @Inject(CUSTOMER_REPOSITORY)
     private readonly repository: ICustomerRepository,
     @Inject(TRANSPORT_TYPE_REPOSITORY)
@@ -24,7 +27,16 @@ export class CustomersService {
   ) {}
 
   async create(dto: CreateCustomerDto): Promise<Customer> {
-    return this.repository.create(dto);
+    const customer = await this.repository.create(dto);
+    this.logger.info(
+      {
+        customerId: customer.id,
+        document: customer.document,
+        email: customer.email,
+      },
+      'Customer created',
+    );
+    return customer;
   }
 
   async findAll(
@@ -53,7 +65,12 @@ export class CustomersService {
   async update(id: string, dto: UpdateCustomerDto): Promise<Customer> {
     await this.findById(id);
 
-    return this.repository.update(id, dto);
+    const customer = await this.repository.update(id, dto);
+    this.logger.info(
+      { customerId: id, fields: Object.keys(dto) },
+      'Customer updated',
+    );
+    return customer;
   }
 
   async setAuthorizedTransportTypes(
@@ -72,9 +89,16 @@ export class CustomersService {
       }
     }
 
-    return this.repository.setAuthorizedTransportTypes(
+    const customer = await this.repository.setAuthorizedTransportTypes(
       id,
       dto.transportTypeIds,
     );
+
+    this.logger.info(
+      { customerId: id, transportTypeIds: dto.transportTypeIds },
+      'Customer authorized transport types updated',
+    );
+
+    return customer;
   }
 }

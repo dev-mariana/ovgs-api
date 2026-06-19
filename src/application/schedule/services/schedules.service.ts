@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { AuditService } from '../../audit/services/audit.service';
 import { BadRequestException } from '../../../common/filters/errors/bad-request.exception';
 import { NotFoundException } from '../../../common/filters/errors/not-found.exception';
@@ -17,6 +18,8 @@ export const DELIVERY_SCHEDULE_REPOSITORY = 'IDeliveryScheduleRepository';
 @Injectable()
 export class SchedulesService {
   constructor(
+    @InjectPinoLogger(SchedulesService.name)
+    private readonly logger: PinoLogger,
     @Inject(DELIVERY_SCHEDULE_REPOSITORY)
     private readonly scheduleRepository: IDeliveryScheduleRepository,
     @Inject(SALES_ORDER_REPOSITORY)
@@ -32,6 +35,14 @@ export class SchedulesService {
     if (!order) throw new NotFoundException('Sales order not found.');
 
     if (order.status !== OrderStatus.PLANNED) {
+      this.logger.warn(
+        {
+          salesOrderId,
+          currentStatus: order.status,
+          rule: 'INVALID_ORDER_STATUS',
+        },
+        'Business rule violated: schedule can only be created when order is PLANNED',
+      );
       throw new UnprocessableEntityException(
         'Delivery schedule can only be created when the order is in PLANNED status.',
         'INVALID_ORDER_STATUS',
@@ -41,6 +52,10 @@ export class SchedulesService {
     const existing =
       await this.scheduleRepository.findBySalesOrderId(salesOrderId);
     if (existing) {
+      this.logger.warn(
+        { salesOrderId, scheduleId: existing.id },
+        'Conflict: delivery schedule already exists for this order',
+      );
       throw new HttpException(
         'Delivery schedule already exists for this order.',
         HttpStatus.CONFLICT,
@@ -73,6 +88,15 @@ export class SchedulesService {
       },
     });
 
+    this.logger.info(
+      {
+        salesOrderId,
+        scheduleId: schedule.id,
+        scheduledDate: dto.scheduledDate,
+      },
+      'Delivery schedule created',
+    );
+
     return schedule;
   }
 
@@ -89,6 +113,14 @@ export class SchedulesService {
       OrderStatus.SCHEDULED,
     ];
     if (!reschedulableStatuses.includes(order.status)) {
+      this.logger.warn(
+        {
+          salesOrderId,
+          currentStatus: order.status,
+          rule: 'INVALID_ORDER_STATUS',
+        },
+        'Business rule violated: rescheduling not allowed in current order status',
+      );
       throw new UnprocessableEntityException(
         'Rescheduling is only allowed when the order is in PLANNED or SCHEDULED status.',
         'INVALID_ORDER_STATUS',
@@ -134,6 +166,15 @@ export class SchedulesService {
       },
     });
 
+    this.logger.info(
+      {
+        salesOrderId,
+        scheduleId: schedule.id,
+        scheduledDate: updated.scheduledDate,
+      },
+      'Delivery schedule rescheduled',
+    );
+
     return updated;
   }
 
@@ -146,6 +187,14 @@ export class SchedulesService {
     if (!schedule) throw new NotFoundException('Delivery schedule not found.');
 
     if (schedule.confirmedAt) {
+      this.logger.warn(
+        {
+          salesOrderId,
+          scheduleId: schedule.id,
+          confirmedAt: schedule.confirmedAt,
+        },
+        'Conflict: delivery schedule is already confirmed',
+      );
       throw new HttpException(
         'Delivery schedule is already confirmed.',
         HttpStatus.CONFLICT,
@@ -161,6 +210,15 @@ export class SchedulesService {
       previousState: { confirmedAt: null },
       nextState: { confirmedAt: confirmed.confirmedAt },
     });
+
+    this.logger.info(
+      {
+        salesOrderId,
+        scheduleId: schedule.id,
+        confirmedAt: confirmed.confirmedAt,
+      },
+      'Delivery schedule confirmed',
+    );
 
     return confirmed;
   }

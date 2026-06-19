@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { NotFoundException } from '../../../common/filters/errors/not-found.exception';
 import type { TransportType } from '../../../domain/transport-type/entities/transport-type.entity';
 import type { ITransportTypeRepository } from '../../../domain/transport-type/repositories/transport-type.repository';
@@ -10,16 +11,23 @@ export const TRANSPORT_TYPE_REPOSITORY = 'ITransportTypeRepository';
 @Injectable()
 export class TransportTypesService {
   constructor(
+    @InjectPinoLogger(TransportTypesService.name)
+    private readonly logger: PinoLogger,
     @Inject(TRANSPORT_TYPE_REPOSITORY)
     private readonly repository: ITransportTypeRepository,
   ) {}
 
   async create(dto: CreateTransportTypeDto): Promise<TransportType> {
-    return this.repository.create({
+    const transportType = await this.repository.create({
       name: dto.name,
       description: dto.description,
       active: dto.active ?? true,
     });
+    this.logger.info(
+      { transportTypeId: transportType.id, name: transportType.name },
+      'Transport type created',
+    );
+    return transportType;
   }
 
   async findAll(): Promise<TransportType[]> {
@@ -41,6 +49,15 @@ export class TransportTypesService {
   ): Promise<TransportType> {
     await this.findById(id);
 
-    return this.repository.update(id, dto);
+    const transportType = await this.repository.update(id, dto);
+    this.logger.info(
+      {
+        transportTypeId: id,
+        fields: Object.keys(dto),
+        active: transportType.active,
+      },
+      'Transport type updated',
+    );
+    return transportType;
   }
 }
