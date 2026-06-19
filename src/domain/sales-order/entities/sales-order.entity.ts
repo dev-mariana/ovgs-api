@@ -15,6 +15,7 @@ export interface SalesOrder {
   notes?: string;
   items?: SalesOrderItem[];
   schedule?: DeliverySchedule | null;
+  itemCount?: number;
   createdAt: Date;
   updatedAt: Date;
 }

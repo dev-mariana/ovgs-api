@@ -64,7 +64,11 @@ export class PrismaSalesOrderRepository implements ISalesOrderRepository {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { customer: true, transportType: true },
+        include: {
+          customer: true,
+          transportType: true,
+          _count: { select: { items: true } },
+        },
       }),
 
       this.prisma.salesOrder.count({ where }),

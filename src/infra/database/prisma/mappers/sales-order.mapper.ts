@@ -18,6 +18,7 @@ type PrismaSalesOrderWithRelations = PrismaSalesOrder & {
   transportType?: PrismaTransportType;
   items?: (PrismaSalesOrderItem & { item: PrismaItem })[];
   schedule?: PrismaDeliverySchedule | null;
+  _count?: { items: number };
 };
 
 export class SalesOrderMapper {
@@ -45,6 +46,7 @@ export class SalesOrderMapper {
       schedule: raw.schedule
         ? DeliveryScheduleMapper.toDomain(raw.schedule)
         : null,
+      itemCount: raw._count?.items,
       createdAt: raw.createdAt,
       updatedAt: raw.updatedAt,
     };
