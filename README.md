@@ -1,98 +1,181 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# OVGS — Sistema de Gestão de Ordens de Venda
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+API REST para gerenciamento do ciclo de vida completo de Ordens de Venda: cadastros, transições de status, agendamento de entregas e auditoria de alterações.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## Stack
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+| Tecnologia | Papel |
+|---|---|
+| Node.js 22 + TypeScript | Runtime e linguagem |
+| NestJS 11 | Framework HTTP (módulos, DI, pipes, filtros) |
+| PostgreSQL 16 | Banco de dados relacional |
+| Prisma 7 | ORM, migrations e type-safety |
+| nestjs-pino | Logs estruturados em JSON com correlationId |
+| @nestjs/swagger | Documentação interativa OpenAPI |
+| Jest + Supertest | Testes unitários e E2E |
 
-## Project setup
+---
 
-```bash
-$ npm install
-```
+## Pré-requisitos
 
-## Compile and run the project
+- Node.js >= 22
+- Docker e Docker Compose (ou PostgreSQL 16 rodando localmente)
+
+---
+
+## Instalação e execução
+
+### 1. Instalar dependências
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm install
 ```
 
-## Run tests
+### 2. Configurar variáveis de ambiente
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+cp .env.example .env
 ```
 
-## Deployment
+O arquivo `.env` já vem preenchido para o ambiente local:
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+```env
+DATABASE_URL=postgresql://ovgs:ovgs@localhost:5432/ovgs
+PORT=3000
+NODE_ENV=development
+```
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### 3. Subir o banco de dados
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+docker compose up -d
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+### 4. Rodar as migrations
 
-## Resources
+```bash
+npx prisma migrate deploy
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+### 5. Iniciar a aplicação
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```bash
+# Modo desenvolvimento (hot reload)
+npm run start:dev
 
-## Support
+# Modo produção
+npm run build && npm run start:prod
+```
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+A API estará disponível em `http://localhost:3000`.
 
-## Stay in touch
+Documentação interativa (Swagger): `http://localhost:3000/docs`
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+---
 
-## License
+## Testes
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+```bash
+# Unitários (sem banco)
+npm run test
+
+# E2E (requer banco rodando)
+npm run test:e2e
+
+# Cobertura
+npm run test:cov
+```
+
+> Os testes E2E limpam e recriam os dados a cada caso de teste — use um banco separado ou garanta que o banco de desenvolvimento pode ser descartado.
+
+---
+
+## Endpoints
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `POST` | `/transport-types` | Criar tipo de transporte |
+| `GET` | `/transport-types` | Listar tipos de transporte |
+| `GET` | `/transport-types/:id` | Detalhe do tipo de transporte |
+| `PATCH` | `/transport-types/:id` | Atualizar tipo de transporte |
+| `POST` | `/items` | Criar item |
+| `GET` | `/items` | Listar itens (com busca por `search`) |
+| `GET` | `/items/:id` | Detalhe do item |
+| `POST` | `/customers` | Criar cliente |
+| `GET` | `/customers` | Listar clientes (com busca por `search`) |
+| `GET` | `/customers/:id` | Detalhe do cliente com transportes autorizados |
+| `PATCH` | `/customers/:id` | Atualizar cliente |
+| `PUT` | `/customers/:id/transport-types` | Substituir transportes autorizados |
+| `POST` | `/sales-orders` | Criar ordem de venda |
+| `GET` | `/sales-orders` | Listar ordens (filtros: status, cliente, transporte, datas) |
+| `GET` | `/sales-orders/:id` | Detalhe da ordem com itens, agendamento e histórico de auditoria |
+| `PATCH` | `/sales-orders/:id/status` | Avançar status da ordem |
+| `POST` | `/sales-orders/:id/schedule` | Criar agendamento de entrega |
+| `PATCH` | `/sales-orders/:id/schedule` | Reagendar entrega |
+| `POST` | `/sales-orders/:id/schedule/confirm` | Confirmar agendamento |
+| `GET` | `/audit-logs` | Consultar logs de auditoria (filtros: entity, entityId, action) |
+
+---
+
+## Regras de negócio
+
+| Código | Regra |
+|--------|-------|
+| RN-01 | O tipo de transporte da ordem deve estar na lista de autorizados do cliente |
+| RN-02 | Uma ordem deve ter ao menos um item |
+| RN-03 | Todos os itens referenciados devem existir no cadastro |
+| RN-06 | Para avançar ao status `SCHEDULED` a ordem deve possuir um agendamento |
+| RN-07 | Para avançar ao status `IN_TRANSIT` o agendamento deve estar confirmado |
+| RN-09 | O horário `windowEnd` deve ser posterior ao `windowStart` |
+| RN-10 | Reagendamento só é permitido nos status `PLANNED` e `SCHEDULED` |
+
+### Fluxo de status
+
+```
+CREATED → PLANNED → SCHEDULED → IN_TRANSIT → DELIVERED
+```
+
+Não há transições retroativas nem saltos de etapa.
+
+---
+
+## Decisões arquiteturais
+
+### Clean Architecture em camadas
+
+O projeto segue separação explícita entre domínio, aplicação e infraestrutura:
+
+```
+src/
+├── domain/          # Entidades, interfaces de repositório, enums, regras puras
+├── application/     # Services, controllers, DTOs — orquestração de casos de uso
+└── infra/           # Implementações Prisma, módulo de log
+```
+
+Nenhuma dependência do `domain/` aponta para NestJS ou Prisma, mantendo a lógica de negócio testável de forma isolada.
+
+### Repository Pattern com injeção por token string
+
+Os repositórios são definidos como interfaces em `domain/` e injetados via token string (`SALES_ORDER_REPOSITORY = 'ISalesOrderRepository'`). Isso desacopla os services das implementações concretas do Prisma e facilita a troca em testes unitários sem carregar o framework.
+
+### OrderStatusMachine
+
+As transições de status são centralizadas em `OrderStatusMachine` — uma classe pura sem dependências de framework. Qualquer tentativa de transição inválida lança `InvalidTransitionError`, que o service mapeia para HTTP 422. Isso garante que a regra de fluxo é testável sem subir a aplicação.
+
+### Auditoria pós-operação
+
+O `AuditService.record()` é chamado após a operação principal ser persistida com sucesso. Isso significa que em caso de falha no registro de auditoria, a operação já foi commitada. O trade-off consciente é favorecer consistência da operação de negócio sobre a completude do log — uma solução transacional (evento dentro da mesma transação) seria mais robusta mas exigiria maior complexidade de infraestrutura.
+
+### itemCount via `_count` do Prisma
+
+A listagem de ordens retorna `itemCount` sem carregar os itens completos. Isso é feito através de `_count: { select: { items: true } }` no `findAll` do repositório, evitando N+1 e mantendo a resposta leve.
+
+### Logging estruturado com nestjs-pino
+
+Todos os services usam `@InjectPinoLogger(ServiceName)` para logging contextualizado. Cada log de warning inclui o campo `rule` com o código da regra violada (ex: `TRANSPORT_NOT_AUTHORIZED`), facilitando a rastreabilidade em produção. O `correlationId` é propagado via header `x-correlation-id` ou gerado automaticamente por requisição.
+
+### ConfigModule para carregamento do .env
+
+O `ConfigModule.forRoot({ isGlobal: true })` é carregado como primeiro módulo no `AppModule`, garantindo que as variáveis de ambiente estejam disponíveis antes de qualquer instanciação de serviço (incluindo o `PrismaService`).
