@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { AuditModule } from './application/audit/audit.module';
 import { CustomerModule } from './application/customer/customer.module';
 import { ItemModule } from './application/item/item.module';
@@ -9,6 +10,7 @@ import { LoggerModule } from './infra/logger/logger.module';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
     LoggerModule,
     TransportTypeModule,
     ItemModule,
