@@ -118,6 +118,19 @@ export class PrismaSalesOrderRepository implements ISalesOrderRepository {
     return SalesOrderMapper.toDomain(raw);
   }
 
+  async updateTransportType(
+    id: string,
+    transportTypeId: string,
+  ): Promise<SalesOrder> {
+    const raw = await this.prisma.salesOrder.update({
+      where: { id },
+      data: { transportTypeId },
+      include: WITH_FULL_RELATIONS,
+    });
+
+    return SalesOrderMapper.toDomain(raw);
+  }
+
   async generateOrderNumber(tx?: Prisma.TransactionClient): Promise<string> {
     const client = tx ?? this.prisma;
     const year = new Date().getFullYear();

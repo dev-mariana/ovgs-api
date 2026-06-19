@@ -24,6 +24,7 @@ import { TRANSPORT_TYPE_REPOSITORY } from '../../transport-type/services/transpo
 import type { CreateSalesOrderDto } from '../dto/create-sales-order.dto';
 import type { ListSalesOrdersDto } from '../dto/list-sales-orders.dto';
 import type { UpdateOrderStatusDto } from '../dto/update-order-status.dto';
+import type { UpdateTransportTypeDto } from '../dto/update-transport-type.dto';
 
 export const SALES_ORDER_REPOSITORY = 'ISalesOrderRepository';
 
@@ -224,6 +225,80 @@ export class SalesOrdersService {
     this.logger.info(
       { orderId: id, from: previousStatus, to: dto.status },
       'Order status transitioned',
+    );
+
+    return updated;
+  }
+
+  async updateTransportType(
+    id: string,
+    dto: UpdateTransportTypeDto,
+  ): Promise<SalesOrder> {
+    const order = await this.orderRepository.findById(id);
+    if (!order) throw new NotFoundException('Sales order not found.');
+
+    // Only allow change before IN_TRANSIT
+    const lockedStatuses = [OrderStatus.IN_TRANSIT, OrderStatus.DELIVERED];
+    if (lockedStatuses.includes(order.status)) {
+      this.logger.warn(
+        { orderId: id, status: order.status, rule: 'TRANSPORT_CHANGE_NOT_ALLOWED' },
+        'Business rule violated: transport type cannot be changed in current order status',
+      );
+      throw new UnprocessableEntityException(
+        'Transport type cannot be changed once the order is IN_TRANSIT or DELIVERED.',
+        'TRANSPORT_CHANGE_NOT_ALLOWED',
+      );
+    }
+
+    const transportType = await this.transportTypeRepository.findById(
+      dto.transportTypeId,
+    );
+    if (!transportType)
+      throw new NotFoundException('Transport type not found.');
+
+    // RN-01: new transport type must also be authorized for this customer
+    const customer = await this.customerRepository.findById(order.customerId);
+    const isAuthorized =
+      customer?.authorizedTransportTypes?.some(
+        (t) => t.id === dto.transportTypeId,
+      ) ?? false;
+    if (!isAuthorized) {
+      this.logger.warn(
+        {
+          orderId: id,
+          customerId: order.customerId,
+          transportTypeId: dto.transportTypeId,
+          rule: 'TRANSPORT_NOT_AUTHORIZED',
+        },
+        `Business rule violated: transport type '${transportType.name}' is not authorized for this customer`,
+      );
+      throw new UnprocessableEntityException(
+        `Transport type '${transportType.name}' is not authorized for this customer.`,
+        'TRANSPORT_NOT_AUTHORIZED',
+      );
+    }
+
+    const previousTransportTypeId = order.transportTypeId;
+    const updated = await this.orderRepository.updateTransportType(
+      id,
+      dto.transportTypeId,
+    );
+
+    await this.auditService.record({
+      entity: 'SalesOrder',
+      entityId: id,
+      action: AuditAction.ORDER_TRANSPORT_CHANGED,
+      previousState: { transportTypeId: previousTransportTypeId },
+      nextState: { transportTypeId: dto.transportTypeId },
+    });
+
+    this.logger.info(
+      {
+        orderId: id,
+        from: previousTransportTypeId,
+        to: dto.transportTypeId,
+      },
+      'Order transport type changed',
     );
 
     return updated;

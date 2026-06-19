@@ -29,5 +29,6 @@ export interface ISalesOrderRepository {
   findAll(params: ListSalesOrdersParams): Promise<PaginatedResult<SalesOrder>>;
   create(data: CreateSalesOrderData): Promise<SalesOrder>;
   updateStatus(id: string, status: OrderStatus): Promise<SalesOrder>;
+  updateTransportType(id: string, transportTypeId: string): Promise<SalesOrder>;
   generateOrderNumber(): Promise<string>;
 }
